@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NFL Depth Charts</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --surface2: #21262d;
+  --border:   #30363d;
+  --text:     #e6edf3;
+  --dim:      #8b949e;
+  --dimmer:   #484f58;
+  --accent:   #58a6ff;
+  --hdr:      52px;
+  --grid-h:   204px; /* logo grid section height */
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  min-width: 1100px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+#hdr {
+  flex-shrink: 0;
+  height: var(--hdr);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  z-index: 100;
+}
+
+#hdr h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+#ts {
+  font-size: 11px;
+  color: var(--dim);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+#ts.stale { color: #f0883e; border-color: #f0883e44; }
+
+.gap { flex: 1; }
+
+.hdr-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: color 0.1s, border-color 0.1s;
+}
+.hdr-btn:hover { color: var(--text); border-color: var(--dim); }
+.hdr-btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+
+.search-wrap { position: relative; display: flex; align-items: center; }
+.search-wrap::before {
+  content: '⌕';
+  position: absolute;
+  left: 9px;
+  color: var(--dimmer);
+  font-size: 16px;
+  pointer-events: none;
+}
+#search {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px 5px 30px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  width: 210px;
+}
+#search:focus { outline: none; border-color: var(--accent); }
+#search::placeholder { color: var(--dimmer); }
+
+/* ── Logo grid section ───────────────────────────────────── */
+#logo-section {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+  padding: 10px 16px 12px;
+}
+
+.conf-row {
+  display: flex;
+  gap: 14px; /* gap between divisions */
+  align-items: stretch;
+}
+.conf-row + .conf-row { margin-top: 8px; }
+
+.div-group {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+}
+
+.team-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 4px 7px;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, transform 0.1s;
+  user-select: none;
+  position: relative;
+}
+
+.team-box:hover {
+  border-color: var(--dimmer);
+  background: var(--surface2);
+  transform: translateY(-1px);
+}
+
+.team-box.selected {
+  border-color: var(--tc, var(--accent));
+  background: color-mix(in srgb, var(--tc, var(--accent)) 18%, var(--bg));
+}
+
+.team-box.dimmed {
+  opacity: 0.3;
+}
+
+.team-box img {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  display: block;
+}
+
+.team-box .fallback-logo {
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.box-abbrev {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.team-box.selected .box-abbrev { color: var(--text); }
+
+/* ── Comparison table section ────────────────────────────── */
+#table-section {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dimmer);
+  font-size: 14px;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#empty-state .arrow { font-size: 22px; }
+
+#table-wrap {
+  flex: 1;
+  overflow: auto;
+  display: none;
+}
+
+/* ── Depth chart table ───────────────────────────────────── */
+#depth-table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* Rank column — narrow label (1 / 2 / 3) */
+#depth-table .rank-col {
+  width: 26px;
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 30;
+}
+
+/* Position group header rows */
+#depth-table .pos-hdr td {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  border-top: 2px solid var(--border);
+  padding: 5px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+  position: sticky;
+  left: 0;
+  z-index: 25;
+}
+#depth-table .pos-hdr td.rank-col {
+  padding: 0;
+}
+
+/* Sticky table header */
+#depth-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+}
+
+#depth-table thead th.rank-col {
+  z-index: 50;
+}
+
+/* Team column headers */
+.team-th {
+  min-width: 150px;
+  padding: 0;
+  border-left: 1px solid var(--border);
+  border-bottom: 3px solid var(--tc, var(--accent)) !important;
+}
+
+.team-th-inner {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+}
+
+.team-th img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.team-th-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+
+.desel-btn {
+  background: none;
+  border: none;
+  color: var(--dimmer);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.desel-btn:hover { color: var(--text); background: var(--surface2); }
+
+/* Player rows */
+#depth-table tbody tr.player-row td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#depth-table tbody tr.player-row td.rank-col {
+  border-left: none;
+  text-align: right;
+  padding-right: 6px;
+  font-size: 10px;
+  color: var(--dimmer);
+  background: var(--surface);
+}
+
+/* Rank-based text styling */
+tr.rank-1 td:not(.rank-col) { font-weight: 600; color: #f0f6fc; font-size: 13px; }
+tr.rank-2 td:not(.rank-col) { color: var(--dim); font-size: 12px; }
+tr.rank-3 td:not(.rank-col) { color: var(--dimmer); font-size: 12px; }
+
+tr.rank-1:hover td, tr.rank-2:hover td, tr.rank-3:hover td {
+  background: #1c2128;
+}
+
+/* Injury badges */
+.inj {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 14px;
+  vertical-align: middle;
+  margin-left: 5px;
+}
+.inj-out { background: #da3633; color: #fff; }
+.inj-q   { background: #9e6a03; color: #fff; }
+.inj-d   { background: #c46d0a; color: #fff; }
+.inj-dtd { background: #7d4e00; color: #ddd; }
+.inj-ir  { background: #6e1c1c; color: #ddd; }
+
+/* Empty cell dash */
+.empty-cell { color: var(--dimmer); }
+
+/* No-data splash */
+#no-data {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--dim);
+  text-align: center;
+}
+#no-data h2 { font-size: 18px; color: var(--text); }
+#no-data code {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--accent);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dimmer); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="hdr">
+  <h1 id="title">NFL Depth Charts</h1>
+  <span id="ts">no data</span>
+  <div class="gap"></div>
+  <div class="search-wrap">
+    <input type="text" id="search" placeholder="Filter by player or team…"
+      oninput="onSearch(this.value)" autocomplete="off" spellcheck="false">
+  </div>
+  <button class="hdr-btn" id="clear-btn" onclick="clearAll()" disabled>Clear all</button>
+</div>
+
+<!-- Logo grid -->
+<div id="logo-section">
+  <!-- AFC row: 4 divisions × 4 teams = 16 -->
+  <div class="conf-row" id="afc-row"></div>
+  <!-- NFC row: 4 divisions × 4 teams = 16 -->
+  <div class="conf-row" id="nfc-row"></div>
+</div>
+
+<!-- Comparison table / empty state / no-data -->
+<div id="no-data">
+  <h2>No depth chart data</h2>
+  <p>Run the fetch script to pull all 32 teams:</p>
+  <code>python3 fetch.py</code>
+  <p style="font-size:12px;margin-top:4px">Takes ~45 seconds on first run (downloads logos too).</p>
+</div>
+
+<div id="table-section">
+  <div id="empty-state">
+    <div class="arrow">↑</div>
+    <span>Click a team logo to see their depth chart.<br>Select multiple teams to compare side by side.</span>
+  </div>
+  <div id="table-wrap">
+    <table id="depth-table">
+      <thead><tr id="tbl-head"></tr></thead>
+      <tbody id="tbl-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="cache.js"></script>
+<script>
+'use strict';
+
+// Teams ordered by conference + division (for the grid layout and column ordering)
+const DIVISIONS = [
+  // AFC
+  ['BUF','MIA','NE','NYJ'],    // AFC East
+  ['BAL','CIN','CLE','PIT'],   // AFC North
+  ['HOU','IND','JAX','TEN'],   // AFC South
+  ['DEN','KC','LV','LAC'],     // AFC West
+  // NFC
+  ['DAL','NYG','PHI','WSH'],   // NFC East
+  ['CHI','DET','GB','MIN'],    // NFC North
+  ['ATL','CAR','NO','TB'],     // NFC South
+  ['ARI','LAR','SF','SEA'],    // NFC West
+];
+
+const POSITIONS = [
+  { key: 'qb',      label: 'QB'       },
+  { key: 'rb',      label: 'RB'       },
+  { key: 'wr_x',    label: 'WR — X'   },
+  { key: 'wr_z',    label: 'WR — Z'   },
+  { key: 'wr_slot', label: 'WR — Slot'},
+  { key: 'te',      label: 'TE'       },
+  { key: 'k',       label: 'K'        },
+];
+
+// ── State ─────────────────────────────────────────────────────
+let selected = new Set();   // Set of team IDs (strings)
+let searchQ  = '';
+
+// ── Helpers ───────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function injBadge(player) {
+  if (!player || !player.injury) return '';
+  const MAP = {
+    'out':          ['OUT', 'inj-out'],
+    'questionable': ['Q',   'inj-q'  ],
+    'doubtful':     ['D',   'inj-d'  ],
+    'day-to-day':   ['DTD', 'inj-dtd'],
+    'ir':           ['IR',  'inj-ir' ],
+  };
+  const key = player.injury.toLowerCase();
+  const [lbl, cls] = MAP[key] || [player.injury.slice(0,3).toUpperCase(), 'inj-out'];
+  return `<span class="inj ${cls}">${lbl}</span>`;
+}
+
+// Build abbreviation → team lookup
+let byAbbrev = {};
+let divisionOrder = []; // flat ordered list of team IDs
+
+function buildLookups() {
+  Object.values(CACHE.teams).forEach(t => { byAbbrev[t.abbreviation] = t; });
+  divisionOrder = DIVISIONS.flat()
+    .map(abbrev => byAbbrev[abbrev])
+    .filter(Boolean)
+    .map(t => String(t.id));
+}
+
+// ── Logo grid ─────────────────────────────────────────────────
+function renderGrid() {
+  const afcRow = document.getElementById('afc-row');
+  const nfcRow = document.getElementById('nfc-row');
+  afcRow.innerHTML = DIVISIONS.slice(0, 4).map(divGroupHtml).join('');
+  nfcRow.innerHTML = DIVISIONS.slice(4).map(divGroupHtml).join('');
+}
+
+function divGroupHtml(abbrevs) {
+  return `<div class="div-group">${abbrevs.map(teamBoxHtml).join('')}</div>`;
+}
+
+function teamBoxHtml(abbrev) {
+  const team = byAbbrev[abbrev];
+  if (!team) return `<div class="team-box dimmed"><div class="fallback-logo">${esc(abbrev)}</div><span class="box-abbrev">${esc(abbrev)}</span></div>`;
+  const tid = String(team.id);
+  const tc = team.color ? `#${team.color}` : '#58a6ff';
+  const isSel = selected.has(tid);
+  const isDim = searchQ && !teamMatchesSearch(team);
+  return `<div class="team-box${isSel ? ' selected' : ''}${isDim ? ' dimmed' : ''}"
+    data-tid="${esc(tid)}"
+    style="--tc:${esc(tc)}"
+    onclick="toggleTeam('${esc(tid)}')"
+    title="${esc(team.displayName)}">
+    <img src="${esc(team.logo)}" alt="${esc(abbrev)}"
+      onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'fallback-logo',textContent:'${esc(abbrev)}'}))">
+    <span class="box-abbrev">${esc(abbrev)}</span>
+  </div>`;
+}
+
+// ── Team selection ────────────────────────────────────────────
+function toggleTeam(tid) {
+  tid = String(tid);
+  if (selected.has(tid)) {
+    selected.delete(tid);
+  } else {
+    selected.add(tid);
+  }
+  // Update just the affected box (no full grid re-render)
+  const box = document.querySelector(`.team-box[data-tid="${tid}"]`);
+  if (box) {
+    box.classList.toggle('selected', selected.has(tid));
+  }
+  document.getElementById('clear-btn').disabled = selected.size === 0;
+  renderTable();
+}
+
+function clearAll() {
+  selected.clear();
+  document.querySelectorAll('.team-box.selected').forEach(b => b.classList.remove('selected'));
+  document.getElementById('clear-btn').disabled = true;
+  renderTable();
+}
+
+// ── Comparison table ──────────────────────────────────────────
+function renderTable() {
+  const empty = document.getElementById('empty-state');
+  const wrap  = document.getElementById('table-wrap');
+
+  if (selected.size === 0) {
+    empty.style.display = '';
+    wrap.style.display  = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  wrap.style.display  = 'block';
+
+  // Teams in division order
+  const teams = divisionOrder
+    .filter(id => selected.has(id))
+    .map(id => CACHE.teams[id])
+    .filter(Boolean);
+
+  renderTableHead(teams);
+  renderTableBody(teams);
+}
+
+function renderTableHead(teams) {
+  const cells = teams.map(team => {
+    const tc = team.color ? `#${team.color}` : '#58a6ff';
+    return `<th class="team-th" style="--tc:${esc(tc)}">
+      <div class="team-th-inner">
+        <img src="${esc(team.logo)}" alt="${esc(team.abbreviation)}"
+          onerror="this.style.display='none'">
+        <span class="team-th-name">${esc(team.abbreviation)}</span>
+        <button class="desel-btn" onclick="toggleTeam('${esc(String(team.id))}')" title="Remove ${esc(team.displayName)}">×</button>
+      </div>
+    </th>`;
+  }).join('');
+  document.getElementById('tbl-head').innerHTML =
+    `<th class="rank-col"></th>${cells}`;
+}
+
+function renderTableBody(teams) {
+  const rows = POSITIONS.map(pos => {
+    // Position group header row
+    const posHdr = `<tr class="pos-hdr">
+      <td class="rank-col"></td>
+      <td colspan="${teams.length}">${esc(pos.label)}</td>
+    </tr>`;
+
+    // 3 player rows
+    const playerRows = [0, 1, 2].map(rank => {
+      const cells = teams.map(team => {
+        const player = (team.offense[pos.key] || [])[rank];
+        if (!player) return `<td class="empty-cell">—</td>`;
+        return `<td>${esc(player.name)}${injBadge(player)}</td>`;
+      }).join('');
+      return `<tr class="player-row rank-${rank + 1}">
+        <td class="rank-col">${rank + 1}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    return posHdr + playerRows;
+  }).join('');
+
+  document.getElementById('tbl-body').innerHTML = rows;
+}
+
+// ── Search / filter ───────────────────────────────────────────
+function teamMatchesSearch(team) {
+  if (!searchQ) return true;
+  const q = searchQ;
+  if (team.abbreviation.toLowerCase().includes(q)) return true;
+  if (team.displayName.toLowerCase().includes(q)) return true;
+  if ((team.nickname || '').toLowerCase().includes(q)) return true;
+  for (const pos of POSITIONS) {
+    const athletes = team.offense[pos.key] || [];
+    if (athletes.some(p => p.name.toLowerCase().includes(q))) return true;
+  }
+  return false;
+}
+
+function onSearch(raw) {
+  searchQ = raw.toLowerCase().trim();
+  // Dim non-matching logo boxes
+  document.querySelectorAll('.team-box').forEach(box => {
+    const team = CACHE.teams[box.dataset.tid];
+    const matches = team ? teamMatchesSearch(team) : false;
+    box.classList.toggle('dimmed', searchQ.length > 0 && !matches);
+  });
+  // If exactly one team matches and it's not already selected, auto-select?
+  // No — just dim. Let user click.
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const inInput = e.target.tagName === 'INPUT';
+  if (e.key === '/' && !inInput) {
+    e.preventDefault();
+    document.getElementById('search').focus();
+  }
+  if (e.key === 'Escape') {
+    if (inInput) {
+      document.getElementById('search').value = '';
+      onSearch('');
+      document.getElementById('search').blur();
+    } else {
+      clearAll();
+    }
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────
+function init() {
+  if (typeof CACHE === 'undefined' || !CACHE || !CACHE.teams) {
+    document.getElementById('no-data').style.display = 'flex';
+    document.getElementById('logo-section').style.display = 'none';
+    document.getElementById('table-section').style.display = 'none';
+    return;
+  }
+
+  const season = CACHE.season || '';
+  document.getElementById('title').textContent = `NFL Depth Charts ${season}`;
+  document.title = `NFL Depth Charts ${season}`;
+
+  const fetched = new Date(CACHE.fetched_at);
+  const ageH = (Date.now() - fetched) / 36e5;
+  const tsEl = document.getElementById('ts');
+  tsEl.textContent = 'Updated ' + fetched.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+  });
+  if (ageH > 24 * 7) tsEl.classList.add('stale');
+
+  buildLookups();
+  renderGrid();
+  renderTable(); // shows empty state
+}
+
+// Run after cache.js (which precedes this tag) has been parsed
+init();
+</script>
+</body>
+</html>

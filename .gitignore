@@ -1,0 +1,6 @@
+# Generated on every data refresh — not worth committing
+cache.js
+
+# OS files
+.DS_Store
+Thumbs.db
