@@ -71,8 +71,8 @@ def main():
     print("=" * 60)
     print("  Setup complete!")
     print()
-    print("  Next time: just open index.html in your browser.")
-    print("  To refresh roster data: run  python3 fetch.py")
+    print("  Next time: run  python3 launch.py")
+    print("  It auto-refreshes data if it's from a previous day.")
     print("=" * 60)
     print()
 
